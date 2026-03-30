@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SICAP CRM — Monitorizare Contracte Web</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700;800&display=swap"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;background:#070b12}
+body{font-family:'Outfit',system-ui,sans-serif;color:#e2e8f0}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#0d1421}
+::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}
+input,select,textarea,button{font-family:'Outfit',system-ui,sans-serif}
+@keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.35}}
+.fade-up{animation:fadeUp .22s ease both}
+.slide-in{animation:slideIn .22s ease both}
+.col-filter{width:100%;background:#070b12;border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:5px;padding:4px 7px;font-size:11px;outline:none;transition:border-color .15s}
+.col-filter:focus{border-color:#f59e0b;color:#e2e8f0}
+.col-filter option{background:#111827}
+.card-hover:hover{border-color:var(--hc)!important;transform:translateY(-2px);box-shadow:0 8px 24px var(--hs)}
+.row-hover:hover td{background:#0d1421!important}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid transparent}
+.btn{cursor:pointer;border:none;font-family:inherit;transition:all .15s}
+.tab-btn{background:none;border:none;padding:12px 18px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;font-family:inherit}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ─── CONSTANTS ──────────────────────────────────────────────────────────────
+var e = React.createElement;
+var useState = React.useState;
+var useEffect = React.useEffect;
+var useRef = React.useRef;
+var useMemo = React.useMemo;
+var useCallback = React.useCallback;
+
+var LS_C = 'sicap-crm-contracts-v2';
+var LS_R = 'sicap-crm-records-v2';
+var TODAY = new Date();
+
+var RO_M = {ianuarie:0,februarie:1,martie:2,aprilie:3,mai:4,iunie:5,iulie:6,august:7,septembrie:8,octombrie:9,noiembrie:10,decembrie:11,ian:0,feb:1,mar:2,apr:3,iun:5,iul:6,aug:7,sep:8,oct:9,noi:10,dec:11};
+
+var STATUS = {
+  nou:          {label:'Nou',             col:'#64748b',bg:'#1e293b'},
+  contactat:    {label:'Contactat 📞',    col:'#60a5fa',bg:'#0f2544'},
+  email_trimis: {label:'Email Trimis ✉',  col:'#a78bfa',bg:'#1e1052'},
+  oferta_depusa:{label:'Ofertă Depusă 📋',col:'#fbbf24',bg:'#2d1f00'},
+  castigat:     {label:'Câștigat ✓',      col:'#34d399',bg:'#022c1a'},
+  pierdut:      {label:'Pierdut ✗',       col:'#f87171',bg:'#2c0a0a'},
+};
+
+var URGENCY = {
+  urgent: {label:'URGENT',      col:'#ef4444',bg:'rgba(239,68,68,0.08)', days:'≤ 30 zile'},
+  warning:{label:'ATENȚIE',     col:'#f97316',bg:'rgba(249,115,22,0.08)',days:'31–60 zile'},
+  monitor:{label:'MONITORIZARE',col:'#3b82f6',bg:'rgba(59,130,246,0.08)',days:'61–90 zile'},
+};
+
+var C = {bg:'#070b12',surf:'#0d1421',card:'#111827',border:'rgba(255,255,255,0.06)',text:'#e2e8f0',muted:'#4b5563',accent:'#f59e0b',urgent:'#ef4444',warning:'#f97316',monitor:'#3b82f6',ok:'#10b981'};
+
+var TEMPLATES = [
+  {id:'initial',name:'Prezentare Inițială',
+   sub:function(c){return 'Servicii găzduire web – ofertă pentru '+c.autoritate;},
+   body:function(c){return 'Stimate/Stimată {PERSOANA_CONTACT},\n\nVă contactez în urma monitorizării achizițiilor publice. Am constatat că '+c.autoritate+' deține un contract de servicii web/găzduire cu termen de expirare apropiat și aș dori să vă prezint o ofertă competitivă.\n\nFirma noastră oferă servicii complete de găzduire web și mentenanță, adaptate pentru instituții publice:\n\n✓ Găzduire web SSD – uptime garantat 99.9%\n✓ Mentenanță CMS (WordPress) + actualizări de securitate lunare\n✓ Certificat SSL comercial, backup zilnic, protecție malware\n✓ Reînnoire domeniu și management DNS\n✓ Conturi email instituționale nelimitate\n✓ Conformitate GDPR și WCAG 2.1 (obligatoriu din 2025)\n✓ Suport tehnic în limba română – timp de răspuns < 4h\n\nValoarea serviciilor se încadrează confortabil în limita achizițiilor directe.\n\nSunt disponibil pentru o scurtă discuție.\n\nCu respect,\n[NUMELE DVS.] | [FIRMA]\nTel: [TELEFON] | Email: [EMAIL]';}},
+  {id:'followup',name:'Follow-up după apel',
+   sub:function(c){return 'Ofertă servicii web – '+c.autoritate;},
+   body:function(c){return 'Stimate/Stimată {PERSOANA_CONTACT},\n\nVă mulțumesc pentru timpul acordat discuției noastre. Conform celor agreate, vă transmit oferta detaliată:\n\n━━━━━━━━━━━━━━━━━━━━━━\nPACHET BASIC – 300 RON/lună\n━━━━━━━━━━━━━━━━━━━━━━\n• Găzduire 20 GB SSD + domeniu inclus\n• Mentenanță CMS – 2h/lună\n• SSL + backup săptămânal\n\n━━━━━━━━━━━━━━━━━━━━━━\nPACHET STANDARD – 500 RON/lună\n━━━━━━━━━━━━━━━━━━━━━━\n• Găzduire 50 GB SSD + domeniu\n• Mentenanță CMS – 5h/lună + backup zilnic\n• Email instituțional nelimitat\n\n━━━━━━━━━━━━━━━━━━━━━━\nPACHET PREMIUM – 800 RON/lună\n━━━━━━━━━━━━━━━━━━━━━━\n• Găzduire 100 GB SSD + IP dedicat\n• Mentenanță CMS – 10h/lună + monitorizare 24/7\n• Suport prioritar < 2h\n\nContract pe 12 luni. Tranziție asistată.\n\nCu stimă,\n[NUMELE DVS.] | [FIRMA]';}},
+  {id:'formal',name:'Notificare Ofertă SICAP',
+   sub:function(c){return 'Ofertă publicată catalog SICAP – CPV 72415000-2';},
+   body:function(c){return 'Stimate/Stimată {PERSOANA_CONTACT},\n\nVă informăm că am publicat o ofertă în catalogul electronic SICAP pentru serviciile de găzduire web și mentenanță pentru '+c.autoritate+'.\n\nDETALII OFERTĂ:\n• Cod CPV: 72415000-2\n• Perioadă: 12 luni (opțional + 4 luni prelungire)\n• Servere: România/UE (conformitate GDPR)\n• SLA garantat contractual\n• Suport tehnic în limba română\n\nVă rugăm accesați platforma SICAP și căutați oferta noastră.\n\nCu respect,\n[NUMELE DVS.] | [FIRMA]\nTel: [TELEFON] | CUI: [CUI]';}}
+];
+
+// ─── UTILS ──────────────────────────────────────────────────────────────────
+function parseDate(s){
+  if(!s)return null;
+  if(s instanceof Date&&!isNaN(s))return s;
+  s=String(s).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)){var d=new Date(s);return isNaN(d)?null:d;}
+  var dot=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(dot)return new Date(+dot[3],+dot[2]-1,+dot[1]);
+  var ro=s.match(/^(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})/i);
+  if(ro){var m=RO_M[ro[2].toLowerCase()];if(m!==undefined)return new Date(+ro[3],m,+ro[1]);}
+  var d2=new Date(s);return isNaN(d2)?null:d2;
+}
+function autoMap(headers){
+  var h=headers.map(function(s){return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();});
+  var pats={id:['id','nr contract','numar'],autoritate:['autoritate','cumparator','institutie','beneficiar','entitate'],localitate:['localitate','oras','municipiu','comuna'],judet:['judet','county'],valoare:['valoare','pret','suma','val'],furnizor:['furnizor','ofertant','contractor','prestator'],cpv:['cpv','cod cpv'],descriere:['descriere','denumire','obiect','titlu'],dataAtribuire:['data atribuire','data publicare','publicat','data','date'],durateLuni:['durata','perioada','luni','months']};
+  var map={};
+  Object.keys(pats).forEach(function(field){
+    var ps=pats[field];
+    for(var i=0;i<h.length;i++){if(ps.some(function(p){return h[i].includes(p);})){map[field]=headers[i];break;}}
+  });
+  return map;
+}
+function normalize(rows,map){
+  function get(row,field){return map[field]?row[map[field]]:undefined;}
+  return rows.map(function(row,idx){
+    var da=parseDate(get(row,'dataAtribuire'));
+    var dur=parseInt(get(row,'durateLuni'))||12;
+    var exp=null;if(da){exp=new Date(da);exp.setMonth(exp.getMonth()+dur);}
+    var rawVal=get(row,'valoare');
+    var val=parseFloat(String(rawVal||'0').replace(/[^\d.,]/g,'').replace(',','.'))||0;
+    return{id:String(get(row,'id')||'r'+idx),autoritate:String(get(row,'autoritate')||'Necunoscut'),localitate:String(get(row,'localitate')||''),judet:String(get(row,'judet')||''),valoare:val,furnizor:String(get(row,'furnizor')||''),cpv:String(get(row,'cpv')||'72415000-2'),descriere:String(get(row,'descriere')||''),dataAtribuire:da?da.toISOString():null,durateLuni:dur,dataExpirare:exp?exp.toISOString():null};
+  }).filter(function(c){return c.autoritate!=='Necunoscut'||c.valoare>0;});
+}
+function daysUntil(d){return d?Math.round((new Date(d)-TODAY)/86400000):null;}
+function urgencyOf(days){return days===null?'unknown':days<0?'expired':days<=30?'urgent':days<=60?'warning':days<=90?'monitor':'ok';}
+function fmtDate(d){return d?new Date(d).toLocaleDateString('ro-RO',{day:'2-digit',month:'short',year:'numeric'}):'—';}
+function fmtVal(v){return v>0?new Intl.NumberFormat('ro-RO').format(Math.round(v))+' RON':'—';}
+function uc(col){return({urgent:C.urgent,warning:C.warning,monitor:C.monitor,ok:C.ok,expired:'#475569'})[col]||C.muted;}
+function lsGet(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+// ─── APP ────────────────────────────────────────────────────────────────────
+function App(){
+  var cs=useState(lsGet(LS_C)||[]);var contracts=cs[0];var setContracts=cs[1];
+  var rs=useState(lsGet(LS_R)||{});var crm=rs[0];var setCrm=rs[1];
+  var ts=useState('dashboard');var tab=ts[0];var setTab=ts[1];
+  var is=useState(null);var importRows=is[0];var setImportRows=is[1];
+  var ihs=useState([]);var importHeaders=ihs[0];var setImportHeaders=ihs[1];
+  var ms=useState({});var mapping=ms[0];var setMapping=ms[1];
+  var ss=useState(null);var selected=ss[0];var setSelected=ss[1];
+  var ns=useState('');var noteText=ns[0];var setNoteText=ns[1];
+  var cos=useState('');var contact=cos[0];var setContact=cos[1];
+  var tms=useState(null);var tmpl=tms[0];var setTmpl=tms[1];
+  // Column filters state
+  var cfs=useState({autoritate:'',localitate:'',judet:'',valoare:'',furnizor:'',urgency:'all',status:'all',expira:''});
+  var colFilters=cfs[0];var setColFilters=cfs[1];
+  var fileRef=useRef();
+
+  function saveContracts(d){setContracts(d);lsSet(LS_C,d);}
+  function saveCrm(d){setCrm(d);lsSet(LS_R,d);}
+
+  function handleFile(ev){
+    var f=ev.target.files[0];if(!f)return;
+    if(!window.XLSX){alert('Librăria XLSX nu s-a încărcat. Verificați conexiunea la internet.');return;}
+    var reader=new FileReader();
+    reader.onload=function(e2){
+      try{
+        var wb=XLSX.read(e2.target.result,{type:'array',cellDates:true});
+        var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+        if(!rows.length){alert('Fișierul nu conține date.');return;}
+        var hdrs=Object.keys(rows[0]);
+        setImportHeaders(hdrs);setImportRows(rows);setMapping(autoMap(hdrs));
+      }catch(err){alert('Eroare la citire: '+err.message);}
+    };
+    reader.readAsArrayBuffer(f);ev.target.value='';
+  }
+
+  function confirmImport(){
+    var norm=normalize(importRows,mapping);
+    if(!norm.length){alert('Niciun contract valid. Verificați maparea.');return;}
+    saveContracts(norm);setImportRows(null);setTab('contracte');
+  }
+
+  function updateCrm(id,field,val){
+    var upd=Object.assign({},crm);
+    upd[id]=Object.assign({},crm[id]||{});
+    upd[id][field]=val;
+    saveCrm(upd);
+    if(selected&&selected.id===id)setSelected(function(s){return Object.assign({},s,{_crm:upd[id]});});
+  }
+
+  function openContract(c){
+    setSelected(Object.assign({},c,{_crm:crm[c.id]||{status:'nou'}}));
+    setNoteText((crm[c.id]&&crm[c.id].notes)||'');
+    setContact((crm[c.id]&&crm[c.id].contactName)||'');
+    setTmpl(null);
+  }
+
+  var enriched=useMemo(function(){
+    return contracts.map(function(c){
+      var days=daysUntil(c.dataExpirare);
+      return Object.assign({},c,{days:days,urgency:urgencyOf(days),_crm:crm[c.id]||{status:'nou'}});
+    });
+  },[contracts,crm]);
+
+  var urgent  =useMemo(function(){return enriched.filter(function(c){return c.urgency==='urgent'; }).sort(function(a,b){return a.days-b.days;});},[enriched]);
+  var warning =useMemo(function(){return enriched.filter(function(c){return c.urgency==='warning';}).sort(function(a,b){return a.days-b.days;});},[enriched]);
+  var monitor =useMemo(function(){return enriched.filter(function(c){return c.urgency==='monitor';}).sort(function(a,b){return a.days-b.days;});},[enriched]);
+
+  var filtered=useMemo(function(){
+    var cf=colFilters;
+    return enriched.filter(function(c){
+      var st=c._crm.status||'nou';
+      if(cf.autoritate&&!c.autoritate.toLowerCase().includes(cf.autoritate.toLowerCase()))return false;
+      if(cf.localitate&&!c.localitate.toLowerCase().includes(cf.localitate.toLowerCase()))return false;
+      if(cf.judet&&!c.judet.toLowerCase().includes(cf.judet.toLowerCase()))return false;
+      if(cf.furnizor&&!c.furnizor.toLowerCase().includes(cf.furnizor.toLowerCase()))return false;
+      if(cf.valoare){var v=parseFloat(cf.valoare);if(!isNaN(v)&&c.valoare<v)return false;}
+      if(cf.urgency!=='all'&&c.urgency!==cf.urgency)return false;
+      if(cf.status!=='all'&&st!==cf.status)return false;
+      if(cf.expira){var expDays=parseInt(cf.expira);if(!isNaN(expDays)&&(c.days===null||c.days>expDays))return false;}
+      return true;
+    });
+  },[enriched,colFilters]);
+
+  function setCF(field,val){setColFilters(function(prev){var n=Object.assign({},prev);n[field]=val;return n;});}
+  function clearFilters(){setColFilters({autoritate:'',localitate:'',judet:'',valoare:'',furnizor:'',urgency:'all',status:'all',expira:''});}
+
+  var hasFilters=colFilters.autoritate||colFilters.localitate||colFilters.judet||colFilters.valoare||colFilters.furnizor||colFilters.urgency!=='all'||colFilters.status!=='all'||colFilters.expira;
+
+  // ── RENDER HELPERS ──────────────────────────────────────────────────────────
+  function Chip(props){
+    return e('span',{className:'pill',style:{background:props.bg||'transparent',color:props.col,borderColor:props.col+'44'}},props.children);
+  }
+
+  function CardComp(props){
+    var c=props.c;
+    var u=URGENCY[c.urgency];var st=STATUS[c._crm.status||'nou'];
+    return e('div',{
+      onClick:function(){openContract(c);},
+      className:'card-hover',
+      style:{'--hc':u?u.col:C.border,'--hs':(u?u.col:'#000')+'22',background:C.card,border:'1px solid '+C.border,borderRadius:12,padding:16,cursor:'pointer',transition:'all .15s'}
+    },
+      e('div',{style:{fontSize:13,fontWeight:600,lineHeight:1.35,marginBottom:3}},c.autoritate),
+      e('div',{style:{fontSize:11,color:C.muted,marginBottom:12}},[c.localitate,c.judet].filter(Boolean).join(', ')||'—'),
+      e('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}},
+        e('div',null,
+          e('div',{style:{fontSize:15,fontWeight:800,fontFamily:'IBM Plex Mono,monospace',color:C.accent}},fmtVal(c.valoare)),
+          e('div',{style:{marginTop:6}},e(Chip,{col:st.col,bg:st.bg},st.label))
+        ),
+        u&&e('div',{style:{textAlign:'right'}},
+          e('div',{style:{fontSize:28,fontWeight:800,fontFamily:'IBM Plex Mono,monospace',lineHeight:1,color:u.col}},c.days),
+          e('div',{style:{fontSize:9,textTransform:'uppercase',letterSpacing:'0.12em',color:u.col,opacity:0.8}},'zile')
+        )
+      )
+    );
+  }
+
+  function Lane(props){
+    var urgency=props.urgency;var items=props.items;
+    var u=URGENCY[urgency];if(!items.length)return null;
+    return e('div',{className:'fade-up',style:{borderRadius:14,border:'1px solid '+u.col+'30',background:u.bg,overflow:'hidden',marginBottom:16}},
+      e('div',{style:{padding:'14px 20px',borderBottom:'1px solid '+u.col+'20',display:'flex',alignItems:'center',gap:10}},
+        e('div',{style:{width:8,height:8,borderRadius:'50%',background:u.col,animation:urgency==='urgent'?'blink 1.5s infinite':undefined}}),
+        e('span',{style:{fontWeight:700,fontSize:12,textTransform:'uppercase',letterSpacing:'0.12em',color:u.col}},u.label),
+        e('span',{style:{fontSize:12,color:u.col,opacity:0.6}},'— '+u.days+' — '+items.length+' contracte')
+      ),
+      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10,padding:14}},
+        items.map(function(c){return e(CardComp,{key:c.id,c:c});})
+      )
+    );
+  }
+
+  function Dashboard(){
+    var inLucru=enriched.filter(function(c){return['contactat','email_trimis','oferta_depusa'].includes(c._crm.status);}).length;
+    return e('div',null,
+      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:28}},
+        [{num:contracts.length,label:'Total Contracte',col:C.text},{num:urgent.length,label:'Expiră ≤ 30 zile',col:C.urgent,sub:'Acțiune imediată'},{num:warning.length,label:'Expiră 31–60 zile',col:C.warning},{num:inLucru,label:'În Lucru',col:C.ok}].map(function(item){
+          return e('div',{key:item.label,className:'fade-up',style:{background:C.card,border:'1px solid '+C.border,borderRadius:12,padding:'20px 22px'}},
+            e('div',{style:{fontSize:40,fontWeight:800,fontFamily:'IBM Plex Mono,monospace',lineHeight:1,color:item.col}},item.num),
+            e('div',{style:{fontSize:11,color:C.muted,marginTop:8,textTransform:'uppercase',letterSpacing:'0.08em'}},item.label),
+            item.sub&&e('div',{style:{fontSize:10,color:item.col,opacity:0.7,marginTop:3}},item.sub)
+          );
+        })
+      ),
+      e(Lane,{urgency:'urgent',items:urgent}),
+      e(Lane,{urgency:'warning',items:warning}),
+      e(Lane,{urgency:'monitor',items:monitor}),
+      !urgent.length&&!warning.length&&!monitor.length&&e('div',{className:'fade-up',style:{textAlign:'center',padding:60,color:C.muted,background:C.card,borderRadius:14,border:'1px solid '+C.border}},
+        e('div',{style:{fontSize:40,marginBottom:12}},'✓'),
+        e('div',{style:{fontSize:16,fontWeight:600,color:C.text}},'Niciun contract în alertă'),
+        e('div',{style:{fontSize:13,marginTop:6}},'Toate contractele expiră în mai mult de 90 de zile')
+      )
+    );
+  }
+
+  // ── TABLE WITH PER-COLUMN FILTERS ──────────────────────────────────────────
+  function TableView(){
+    var thStyle={textAlign:'left',padding:'10px 14px',fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:'0.08em',borderBottom:'1px solid '+C.border,fontWeight:700,background:C.surf,whiteSpace:'nowrap',verticalAlign:'bottom'};
+    var tfStyle={padding:'6px 8px',borderBottom:'2px solid '+C.accent,background:C.surf+'ee'};
+
+    return e('div',{className:'fade-up'},
+      // Active filters bar
+      hasFilters&&e('div',{style:{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8,padding:'8px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}},
+        e('span',{style:{fontSize:12,color:C.accent}},'Filtre active — '+filtered.length+' din '+contracts.length+' contracte afișate'),
+        e('button',{className:'btn',onClick:clearFilters,style:{background:'none',border:'1px solid rgba(245,158,11,0.3)',color:C.accent,borderRadius:6,padding:'3px 12px',fontSize:11,fontWeight:600}},'✕ Șterge filtre')
+      ),
+      e('div',{style:{background:C.card,border:'1px solid '+C.border,borderRadius:12,overflow:'hidden'}},
+        e('div',{style:{overflowX:'auto'}},
+          e('table',{style:{width:'100%',borderCollapse:'collapse'}},
+            e('thead',null,
+              // Column headers
+              e('tr',null,
+                e('th',{style:thStyle},'Autoritate'),
+                e('th',{style:thStyle},'Localitate'),
+                e('th',{style:thStyle},'Județ'),
+                e('th',{style:thStyle},'Valoare'),
+                e('th',{style:thStyle},'Expiră în'),
+                e('th',{style:thStyle},'Dată Expirare'),
+                e('th',{style:thStyle},'Furnizor Actual'),
+                e('th',{style:thStyle},'Urgență'),
+                e('th',{style:thStyle},'Status CRM'),
+                e('th',{style:thStyle},'Acțiuni')
+              ),
+              // Filter row
+              e('tr',{style:{background:C.surf+'dd'}},
+                // Autoritate
+                e('td',{style:tfStyle},e('input',{className:'col-filter',placeholder:'Filtrează...',value:colFilters.autoritate,onChange:function(ev){setCF('autoritate',ev.target.value);}})),
+                // Localitate
+                e('td',{style:tfStyle},e('input',{className:'col-filter',placeholder:'Filtrează...',value:colFilters.localitate,onChange:function(ev){setCF('localitate',ev.target.value);}})),
+                // Judet
+                e('td',{style:tfStyle},e('input',{className:'col-filter',placeholder:'Filtrează...',value:colFilters.judet,onChange:function(ev){setCF('judet',ev.target.value);}})),
+                // Valoare (min)
+                e('td',{style:tfStyle},e('input',{className:'col-filter',placeholder:'Min RON',type:'number',value:colFilters.valoare,onChange:function(ev){setCF('valoare',ev.target.value);}})),
+                // Expira in (max zile)
+                e('td',{style:tfStyle},e('input',{className:'col-filter',placeholder:'Max zile',type:'number',value:colFilters.expira,onChange:function(ev){setCF('expira',ev.target.value);}})),
+                // Data expirare - spacer
+                e('td',{style:tfStyle}),
+                // Furnizor
+                e('td',{style:tfStyle},e('input',{className:'col-filter',placeholder:'Filtrează...',value:colFilters.furnizor,onChange:function(ev){setCF('furnizor',ev.target.value);}})),
+                // Urgenta select
+                e('td',{style:tfStyle},
+                  e('select',{className:'col-filter',value:colFilters.urgency,onChange:function(ev){setCF('urgency',ev.target.value);}},
+                    e('option',{value:'all'},'Toate'),
+                    e('option',{value:'urgent'},'🔴 Urgent'),
+                    e('option',{value:'warning'},'🟠 Atenție'),
+                    e('option',{value:'monitor'},'🔵 Monitor'),
+                    e('option',{value:'ok'},'✅ OK'),
+                    e('option',{value:'expired'},'⚫ Expirat')
+                  )
+                ),
+                // Status select
+                e('td',{style:tfStyle},
+                  e('select',{className:'col-filter',value:colFilters.status,onChange:function(ev){setCF('status',ev.target.value);}},
+                    e('option',{value:'all'},'Toate'),
+                    Object.keys(STATUS).map(function(k){return e('option',{key:k,value:k},STATUS[k].label);})
+                  )
+                ),
+                e('td',{style:tfStyle})
+              )
+            ),
+            e('tbody',null,
+              filtered.map(function(c){
+                var st=STATUS[c._crm.status||'nou'];
+                var uCol=uc(c.urgency);
+                return e('tr',{key:c.id,className:'row-hover',style:{cursor:'pointer',transition:'background .1s'}},
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',fontSize:13,borderBottom:'1px solid '+C.border,fontWeight:600,maxWidth:220}},
+                    e('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}},c.autoritate)
+                  ),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',fontSize:12,borderBottom:'1px solid '+C.border,color:C.muted,whiteSpace:'nowrap'}},c.localitate||'—'),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',fontSize:12,borderBottom:'1px solid '+C.border,color:C.muted,whiteSpace:'nowrap'}},c.judet||'—'),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',borderBottom:'1px solid '+C.border,fontFamily:'IBM Plex Mono,monospace',color:C.accent,fontWeight:700,fontSize:13,whiteSpace:'nowrap'}},fmtVal(c.valoare)),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',borderBottom:'1px solid '+C.border,whiteSpace:'nowrap'}},
+                    c.days!==null?e('span',{style:{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,color:uCol}},c.days<0?'Expirat':c.days+' zile'):'—'
+                  ),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',fontSize:11,borderBottom:'1px solid '+C.border,color:C.muted,fontFamily:'IBM Plex Mono,monospace',whiteSpace:'nowrap'}},fmtDate(c.dataExpirare)),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',fontSize:12,borderBottom:'1px solid '+C.border,color:C.muted,maxWidth:180}},
+                    e('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:170}},c.furnizor||'—')
+                  ),
+                  e('td',{onClick:function(){openContract(c);},style:{padding:'11px 14px',borderBottom:'1px solid '+C.border,whiteSpace:'nowrap'}},
+                    URGENCY[c.urgency]?e(Chip,{col:URGENCY[c.urgency].col,bg:URGENCY[c.urgency].bg},URGENCY[c.urgency].label):'—'
+                  ),
+                  e('td',{style:{padding:'11px 14px',borderBottom:'1px solid '+C.border}},
+                    e('select',{
+                      value:c._crm.status||'nou',
+                      onChange:function(ev){ev.stopPropagation();updateCrm(c.id,'status',ev.target.value);},
+                      style:{background:STATUS[c._crm.status||'nou'].bg,border:'1px solid '+STATUS[c._crm.status||'nou'].col+'66',color:STATUS[c._crm.status||'nou'].col,borderRadius:20,padding:'3px 8px',fontSize:11,fontWeight:600,cursor:'pointer',outline:'none'}
+                    },
+                      Object.keys(STATUS).map(function(k){return e('option',{key:k,value:k,style:{background:C.card,color:C.text}},STATUS[k].label);})
+                    )
+                  ),
+                  e('td',{style:{padding:'11px 14px',borderBottom:'1px solid '+C.border,whiteSpace:'nowrap'}},
+                    e('button',{className:'btn',onClick:function(){openContract(c);},style:{background:'none',border:'1px solid '+C.border,color:C.muted,borderRadius:6,padding:'4px 10px',fontSize:11}},'Deschide →')
+                  )
+                );
+              }),
+              !filtered.length&&e('tr',null,e('td',{colSpan:10,style:{textAlign:'center',padding:40,color:C.muted,fontSize:13}},'Niciun contract găsit cu filtrele aplicate.'))
+            )
+          )
+        ),
+        e('div',{style:{padding:'10px 16px',borderTop:'1px solid '+C.border,display:'flex',justifyContent:'space-between',alignItems:'center'}},
+          e('span',{style:{fontSize:11,color:C.muted}},filtered.length+' contracte afișate din '+contracts.length+' total'),
+          hasFilters&&e('button',{className:'btn',onClick:clearFilters,style:{background:'none',border:'1px solid '+C.border,color:C.muted,borderRadius:6,padding:'4px 12px',fontSize:11}},'Șterge toate filtrele')
+        )
+      )
+    );
+  }
+
+  // ── MODAL ──────────────────────────────────────────────────────────────────
+  function Modal(){
+    if(!selected)return null;
+    var c=selected;var crmRec=c._crm||{};var u=URGENCY[c.urgency];
+    var activeTmpl=TEMPLATES.find(function(t){return t.id===tmpl;});
+    var emailBody=activeTmpl?activeTmpl.body(c).replace('{PERSOANA_CONTACT}',contact||'Doamnă/Domn'):'';
+
+    function Sect(props){
+      return e('div',{style:{marginTop:22}},
+        e('div',{style:{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:700,marginBottom:10}},props.title),
+        props.children
+      );
+    }
+    function InfoBox(props){
+      return e('div',{style:{background:C.card,borderRadius:8,padding:'10px 14px',border:'1px solid '+C.border}},
+        e('div',{style:{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:'0.07em'}},props.label),
+        e('div',{style:{fontSize:13,fontWeight:600,marginTop:3,fontFamily:'IBM Plex Mono,monospace',color:props.col||C.text}},props.value)
+      );
+    }
+
+    return e('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.78)',zIndex:200,display:'flex',alignItems:'stretch',justifyContent:'flex-end'},onClick:function(ev){if(ev.target===ev.currentTarget)setSelected(null);}},
+      e('div',{className:'slide-in',style:{background:C.surf,width:'min(620px,100vw)',height:'100vh',overflow:'auto',display:'flex',flexDirection:'column'}},
+        // Header
+        e('div',{style:{padding:'22px 24px',borderBottom:'1px solid '+C.border,display:'flex',alignItems:'flex-start',justifyContent:'space-between',position:'sticky',top:0,background:C.surf,zIndex:1}},
+          e('div',null,
+            e('div',{style:{fontSize:15,fontWeight:700,lineHeight:1.35,maxWidth:450}},c.autoritate),
+            e('div',{style:{fontSize:12,color:C.muted,marginTop:3}},[c.localitate,c.judet].filter(Boolean).join(', ')||'—'),
+            u&&e('div',{style:{marginTop:8,display:'inline-flex',alignItems:'center',gap:8,background:u.bg,borderRadius:20,padding:'4px 12px',border:'1px solid '+u.col+'30'}},
+              e('div',{style:{width:6,height:6,borderRadius:'50%',background:u.col,animation:c.urgency==='urgent'?'blink 1.5s infinite':undefined}}),
+              e('span',{style:{fontSize:11,fontWeight:700,color:u.col}},u.label+' — '+c.days+' zile rămase')
+            )
+          ),
+          e('button',{onClick:function(){setSelected(null);},style:{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,padding:'0 0 0 12px'}},'✕')
+        ),
+        // Body
+        e('div',{style:{flex:1,overflow:'auto',padding:'6px 24px 30px'}},
+          e(Sect,{title:'Detalii Contract'},
+            e('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}},
+              e(InfoBox,{label:'Valoare',value:fmtVal(c.valoare),col:C.accent}),
+              e(InfoBox,{label:'Furnizor Actual',value:c.furnizor||'—'}),
+              e(InfoBox,{label:'Data Atribuirii',value:fmtDate(c.dataAtribuire)}),
+              e(InfoBox,{label:'Data Expirării',value:fmtDate(c.dataExpirare),col:c.days!==null&&c.days<=30?C.urgent:C.text}),
+              e(InfoBox,{label:'Durată',value:c.durateLuni+' luni'}),
+              e(InfoBox,{label:'CPV',value:c.cpv})
+            ),
+            c.descriere&&e('div',{style:{marginTop:8,background:C.card,borderRadius:8,padding:'10px 14px',border:'1px solid '+C.border}},
+              e('div',{style:{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}},'Descriere'),
+              e('div',{style:{fontSize:12,color:C.muted,lineHeight:1.6}},c.descriere)
+            )
+          ),
+          e(Sect,{title:'Status CRM'},
+            e('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+              Object.keys(STATUS).map(function(k){
+                var v=STATUS[k];var active=(crmRec.status||'nou')===k;
+                return e('button',{key:k,className:'btn',onClick:function(){updateCrm(c.id,'status',k);},style:{border:'1px solid '+v.col,borderRadius:20,padding:'5px 14px',fontSize:11,fontWeight:600,background:active?v.bg:'transparent',color:active?v.col:C.muted}},v.label);
+              })
+            )
+          ),
+          e(Sect,{title:'Persoana de Contact'},
+            e('input',{placeholder:'Nume, funcție...',value:contact,onChange:function(ev){setContact(ev.target.value);updateCrm(c.id,'contactName',ev.target.value);},style:{width:'100%',background:C.card,border:'1px solid '+C.border,color:C.text,borderRadius:8,padding:'9px 14px',fontSize:13,outline:'none'}})
+          ),
+          e(Sect,{title:'Notițe & Jurnal Apeluri'},
+            e('textarea',{rows:4,value:noteText,placeholder:'Notă apel, cine a răspuns, ce s-a discutat...',onChange:function(ev){setNoteText(ev.target.value);},style:{width:'100%',background:C.card,border:'1px solid '+C.border,color:C.text,borderRadius:8,padding:10,fontSize:13,resize:'vertical',outline:'none',lineHeight:1.5}}),
+            e('button',{className:'btn',onClick:function(){updateCrm(c.id,'notes',noteText);},style:{marginTop:6,background:C.accent,color:'#000',borderRadius:7,padding:'7px 18px',fontWeight:700,fontSize:12}},'✓ Salvează notița')
+          ),
+          e(Sect,{title:'Template Email'},
+            e('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
+              TEMPLATES.map(function(t){
+                var active=tmpl===t.id;
+                return e('button',{key:t.id,className:'btn',onClick:function(){setTmpl(active?null:t.id);},style:{background:C.card,border:'1px solid '+(active?C.accent:C.border),borderRadius:8,padding:'6px 14px',fontSize:12,color:active?C.accent:C.muted}},t.name);
+              })
+            ),
+            activeTmpl&&e('div',{className:'slide-in'},
+              e('div',{style:{background:C.card,border:'1px solid '+C.border,borderRadius:8,padding:'10px 14px',fontSize:12,marginBottom:8}},
+                e('span',{style:{color:C.muted}},'Subiect: '),
+                e('span',{style:{color:C.text,fontWeight:600}},activeTmpl.sub(c))
+              ),
+              e('textarea',{readOnly:true,rows:14,value:emailBody,style:{width:'100%',background:C.card,border:'1px solid '+C.border,color:C.muted,borderRadius:8,padding:12,fontSize:12,lineHeight:1.65,fontFamily:'IBM Plex Mono,monospace',resize:'vertical',outline:'none'}}),
+              e('div',{style:{display:'flex',gap:8,marginTop:8}},
+                e('button',{className:'btn',onClick:function(){navigator.clipboard.writeText('Subiect: '+activeTmpl.sub(c)+'\n\n'+emailBody);},style:{background:C.accent,border:'none',color:'#000',borderRadius:7,padding:'7px 16px',fontSize:12,fontWeight:700}},'📋 Copiază tot'),
+                e('button',{className:'btn',onClick:function(){navigator.clipboard.writeText(emailBody);},style:{background:'none',border:'1px solid '+C.border,color:C.muted,borderRadius:7,padding:'7px 16px',fontSize:12}},'Doar corpul')
+              )
+            )
+          )
+        )
+      )
+    );
+  }
+
+  // ── IMPORT MODAL ───────────────────────────────────────────────────────────
+  function ImportModal(){
+    if(!importRows)return null;
+    var FIELDS=[['id','ID Contract',false],['autoritate','Autoritate Contractantă',true],['localitate','Localitate',false],['judet','Județ',false],['valoare','Valoare (RON)',true],['furnizor','Furnizor Actual',false],['cpv','Cod CPV',false],['descriere','Descriere',false],['dataAtribuire','Data Atribuirii',true],['durateLuni','Durată (luni)',false]];
+    return e('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}},
+      e('div',{style:{background:C.surf,border:'1px solid '+C.border,borderRadius:16,width:'min(700px,100%)',maxHeight:'92vh',overflow:'auto',display:'flex',flexDirection:'column'}},
+        e('div',{style:{padding:'22px 26px',borderBottom:'1px solid '+C.border}},
+          e('div',{style:{fontSize:17,fontWeight:700}},'Mapare Coloane Fișier'),
+          e('div',{style:{fontSize:12,color:C.muted,marginTop:4}},importRows.length+' rânduri · '+importHeaders.length+' coloane detectate')
+        ),
+        e('div',{style:{padding:24,overflow:'auto',flex:1}},
+          e('div',{style:{fontSize:11,color:C.muted,marginBottom:18,padding:'10px 14px',background:C.card,borderRadius:8,lineHeight:1.6}},'Asociați coloanele fișierului cu câmpurile CRM. Câmpurile cu ',e('span',{style:{color:C.urgent}},'*'),' sunt obligatorii pentru calculul expirării.'),
+          FIELDS.map(function(item){
+            var field=item[0];var label=item[1];var req=item[2];
+            return e('div',{key:field,style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:10,alignItems:'center'}},
+              e('div',{style:{fontSize:13,color:C.text}},label,req&&e('span',{style:{color:C.urgent}},' *')),
+              e('select',{value:mapping[field]||'',onChange:function(ev){var v=ev.target.value;setMapping(function(m){var n=Object.assign({},m);n[field]=v;return n;});},style:{background:C.card,border:'1px solid '+(mapping[field]?C.accent:C.border),color:C.text,borderRadius:8,padding:'8px 12px',fontSize:12,width:'100%',outline:'none'}},
+                e('option',{value:''},'— nu mapa —'),
+                importHeaders.map(function(h){return e('option',{key:h,value:h},h);})
+              )
+            );
+          }),
+          importRows[0]&&e('div',{style:{marginTop:16,background:C.card,borderRadius:8,padding:'12px 14px',fontSize:11}},
+            e('div',{style:{color:C.muted,marginBottom:8,fontWeight:600}},'Preview — primul rând:'),
+            e('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+              Object.keys(mapping).filter(function(k){return mapping[k];}).map(function(field){
+                var col=mapping[field];
+                return e('div',{key:field,style:{background:C.surf,borderRadius:4,padding:'3px 10px',border:'1px solid '+C.border}},
+                  e('span',{style:{color:C.accent}},field),
+                  e('span',{style:{color:C.muted}},' → '),
+                  e('span',{style:{color:C.text}},String(importRows[0][col]||'').slice(0,35))
+                );
+              })
+            )
+          )
+        ),
+        e('div',{style:{padding:'16px 26px',borderTop:'1px solid '+C.border,display:'flex',gap:10,justifyContent:'flex-end'}},
+          e('button',{className:'btn',onClick:function(){setImportRows(null);},style:{background:'none',border:'1px solid '+C.border,color:C.muted,borderRadius:8,padding:'9px 20px',fontSize:13}},'Anulează'),
+          e('button',{className:'btn',onClick:confirmImport,style:{background:C.accent,color:'#000',borderRadius:8,padding:'9px 22px',fontSize:13,fontWeight:700}},'✓ Importă '+importRows.length+' contracte')
+        )
+      )
+    );
+  }
+
+  // ── EMPTY STATE ────────────────────────────────────────────────────────────
+  function EmptyState(){
+    return e('div',{style:{textAlign:'center',padding:'80px 20px'}},
+      e('div',{style:{fontSize:64,marginBottom:20}},'📋'),
+      e('div',{style:{fontSize:24,fontWeight:800,color:C.text,marginBottom:10}},'SICAP CRM'),
+      e('div',{style:{fontSize:14,color:C.muted,maxWidth:440,margin:'0 auto 32px',lineHeight:1.7}},
+        'Exportați contractele din ',e('strong',{style:{color:C.accent}},'sicap.ai'),' → CPV ',e('strong',{style:{color:C.text}},'72415000-2'),', filtrați după dată atribuire, exportați CSV/XLS și importați aici.'
+      ),
+      e('button',{className:'btn',onClick:function(){fileRef.current.click();},style:{background:C.accent,color:'#000',borderRadius:10,padding:'14px 32px',fontWeight:800,fontSize:15}},'↑ Importă fișier CSV / XLS'),
+      e('div',{style:{marginTop:14,fontSize:12,color:C.muted}},'Acceptă .csv · .xls · .xlsx · detectare automată coloane')
+    );
+  }
+
+  // ── MAIN LAYOUT ────────────────────────────────────────────────────────────
+  return e('div',{style:{background:C.bg,minHeight:'100vh',display:'flex',flexDirection:'column'}},
+    // Header
+    e('header',{style:{background:C.surf,borderBottom:'1px solid '+C.border,padding:'14px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100}},
+      e('div',{style:{display:'flex',alignItems:'center',gap:14}},
+        e('div',{style:{fontSize:18,fontWeight:800,letterSpacing:'-0.5px',display:'flex',alignItems:'center',gap:8}},
+          e('span',{style:{color:C.accent,fontSize:22}},'◈'),
+          e('span',null,'SICAP CRM')
+        ),
+        e('div',{style:{fontSize:11,color:C.muted,borderLeft:'1px solid '+C.border,paddingLeft:14}},'Monitorizare contracte web / hosting')
+      ),
+      e('div',{style:{display:'flex',gap:10,alignItems:'center'}},
+        urgent.length>0&&e('div',{style:{background:'rgba(239,68,68,0.12)',color:C.urgent,border:'1px solid rgba(239,68,68,0.25)',borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:700,animation:'blink 2s infinite'}},
+          '🔴 '+urgent.length+(urgent.length===1?' contract expiră':' contracte expiră')+' în <30 zile'
+        ),
+        e('button',{className:'btn',onClick:function(){fileRef.current.click();},style:{background:C.accent,color:'#000',borderRadius:8,padding:'9px 20px',fontWeight:700,fontSize:13}},'↑ Import CSV / XLS'),
+        e('input',{ref:fileRef,type:'file',accept:'.csv,.xls,.xlsx',style:{display:'none'},onChange:handleFile})
+      )
+    ),
+    // Tabs
+    contracts.length>0&&e('nav',{style:{background:C.surf,borderBottom:'1px solid '+C.border,padding:'0 24px',display:'flex',gap:2}},
+      [['dashboard','Dashboard'],['contracte','Contracte ('+contracts.length+')']].map(function(item){
+        return e('button',{key:item[0],className:'tab-btn',onClick:function(){setTab(item[0]);},style:{color:tab===item[0]?C.text:C.muted,borderBottomColor:tab===item[0]?C.accent:'transparent'}},item[1]);
+      })
+    ),
+    // Main
+    e('main',{style:{flex:1,padding:24,overflowY:'auto'}},
+      contracts.length===0?e(EmptyState,null):
+      tab==='dashboard'?e(Dashboard,null):e(TableView,null)
+    ),
+    e(ImportModal,null),
+    e(Modal,null)
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>
