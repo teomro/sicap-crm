@@ -139,7 +139,7 @@ function App(){
   var sortS=useState({col:'days',dir:'asc'});var sortCfg=sortS[0];var setSortCfg=sortS[1];
   var openMenuS=useState(null);var openMenu=openMenuS[0];var setOpenMenu=openMenuS[1];
   // column text filters
-  var cfS=useState({autoritate:'',localitate:'',judet:'',furnizor:'',urgency:'all',status:'all'});
+  var cfS=useState({autoritate:'',localitate:'',judet:'',furnizor:'',luna:'all',zi:'all',status:'all'});
   var cf=cfS[0];var setCf=cfS[1];
   var fileRef=useRef();
 
@@ -217,8 +217,15 @@ function App(){
       if(cf.localitate&&!c.localitate.toLowerCase().includes(cf.localitate.toLowerCase()))return false;
       if(cf.judet&&!c.judet.toLowerCase().includes(cf.judet.toLowerCase()))return false;
       if(cf.furnizor&&!c.furnizor.toLowerCase().includes(cf.furnizor.toLowerCase()))return false;
-      if(cf.urgency!=='all'&&c.urgency!==cf.urgency)return false;
       if(cf.status!=='all'&&st!==cf.status)return false;
+      if(cf.luna!=='all'&&c.dataAtribuire){
+        var m=new Date(c.dataAtribuire).getMonth();
+        if(m!==parseInt(cf.luna))return false;
+      }
+      if(cf.zi!=='all'&&c.dataAtribuire){
+        var d=new Date(c.dataAtribuire).getDate();
+        if(d!==parseInt(cf.zi))return false;
+      }
       return true;
     });
     // sort
@@ -230,16 +237,30 @@ function App(){
       if(col==='judet'){av=(a.judet||'').toLowerCase();bv=(b.judet||'').toLowerCase();return dir==='asc'?av.localeCompare(bv):bv.localeCompare(av);}
       if(col==='furnizor'){av=(a.furnizor||'').toLowerCase();bv=(b.furnizor||'').toLowerCase();return dir==='asc'?av.localeCompare(bv):bv.localeCompare(av);}
       if(col==='valoare'){return dir==='asc'?a.valoare-b.valoare:b.valoare-a.valoare;}
-      if(col==='days'){av=a.days===null?99999:a.days;bv=b.days===null?99999:b.days;return dir==='asc'?av-bv:bv-av;}
       if(col==='dataAtribuire'){av=a.dataAtribuire?new Date(a.dataAtribuire).getTime():0;bv=b.dataAtribuire?new Date(b.dataAtribuire).getTime():0;return dir==='asc'?av-bv:bv-av;}
+      if(col==='dataExpirare'){av=a.dataExpirare?new Date(a.dataExpirare).getTime():0;bv=b.dataExpirare?new Date(b.dataExpirare).getTime():0;return dir==='asc'?av-bv:bv-av;}
       return 0;
     });
     return rows;
   },[enriched,cf,sortCfg]);
 
   function setCF(field,val){setCf(function(prev){var n=Object.assign({},prev);n[field]=val;return n;});}
-  function clearFilters(){setCf({autoritate:'',localitate:'',judet:'',furnizor:'',urgency:'all',status:'all'});setSortCfg({col:'days',dir:'asc'});}
-  var hasFilters=cf.autoritate||cf.localitate||cf.judet||cf.furnizor||cf.urgency!=='all'||cf.status!=='all';
+  function clearFilters(){setCf({autoritate:'',localitate:'',judet:'',furnizor:'',luna:'all',zi:'all',status:'all'});setSortCfg({col:'dataAtribuire',dir:'desc'});}
+  var hasFilters=cf.autoritate||cf.localitate||cf.judet||cf.furnizor||cf.luna!=='all'||cf.zi!=='all'||cf.status!=='all';
+
+  // Build unique months and days from contracts for dropdowns
+  var luniDisponibile=useMemo(function(){
+    var LUNI=['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie'];
+    var seen={};
+    enriched.forEach(function(c){if(c.dataAtribuire){var m=new Date(c.dataAtribuire).getMonth();seen[m]=LUNI[m];}});
+    return Object.keys(seen).sort(function(a,b){return a-b;}).map(function(m){return{val:m,label:seen[m]};});
+  },[enriched]);
+
+  var zileDisponibile=useMemo(function(){
+    var seen={};
+    enriched.forEach(function(c){if(c.dataAtribuire){var d=new Date(c.dataAtribuire).getDate();seen[d]=d;}});
+    return Object.keys(seen).sort(function(a,b){return a-b;}).map(function(d){return{val:d,label:d};});
+  },[enriched]);
 
   function setSort(col,dir){setSortCfg({col:col,dir:dir});setOpenMenu(null);}
 
@@ -357,16 +378,15 @@ function App(){
         e('div',{style:{overflowX:'auto'}},
           e('table',{style:{width:'100%',borderCollapse:'collapse'}},
             e('thead',null,
-              // Header row with sortable columns
               e('tr',null,
                 e('th',{style:thStyle},e(SortMenu,{col:'autoritate',label:'Autoritate',isText:true})),
                 e('th',{style:thStyle},e(SortMenu,{col:'localitate',label:'Localitate',isText:true})),
                 e('th',{style:thStyle},e(SortMenu,{col:'judet',label:'Județ',isText:true})),
                 e('th',{style:thStyle},e(SortMenu,{col:'valoare',label:'Valoare',isNum:true})),
-                e('th',{style:thStyle},e(SortMenu,{col:'days',label:'Expiră în',isNum:true})),
                 e('th',{style:thStyle},e(SortMenu,{col:'dataAtribuire',label:'Ziua Licitației',isDate:true})),
+                e('th',{style:thStyle},e(SortMenu,{col:'dataAtribuire',label:'Luna Licitației',isDate:true})),
+                e('th',{style:thStyle},e(SortMenu,{col:'dataExpirare',label:'Data Expirării',isDate:true})),
                 e('th',{style:thStyle},e(SortMenu,{col:'furnizor',label:'Furnizor Actual',isText:true})),
-                e('th',{style:Object.assign({},thStyle,{textAlign:'center'})},e('span',{style:{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.08em'}},'●')),
                 e('th',{style:thStyle},e('span',{style:{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.08em'}},'Status CRM')),
                 e('th',{style:thStyle})
               ),
@@ -376,19 +396,22 @@ function App(){
                 e('td',{style:tfStyle},e('input',{className:'col-filter-input',placeholder:'Caută...',value:cf.localitate,onChange:function(ev){setCF('localitate',ev.target.value);},style:{background:C.inputBg}})),
                 e('td',{style:tfStyle},e('input',{className:'col-filter-input',placeholder:'Caută...',value:cf.judet,onChange:function(ev){setCF('judet',ev.target.value);},style:{background:C.inputBg}})),
                 e('td',{style:tfStyle}),
-                e('td',{style:tfStyle}),
-                e('td',{style:tfStyle}),
-                e('td',{style:tfStyle},e('input',{className:'col-filter-input',placeholder:'Caută...',value:cf.furnizor,onChange:function(ev){setCF('furnizor',ev.target.value);},style:{background:C.inputBg}})),
-                e('td',{style:Object.assign({},tfStyle,{textAlign:'center'}),title:'Filtru urgență'},
-                  e('select',{className:'col-filter-input',value:cf.urgency,onChange:function(ev){setCF('urgency',ev.target.value);},style:{background:C.inputBg,textAlign:'center'}},
+                // Filtru ziua — dropdown cu zilele disponibile
+                e('td',{style:tfStyle},
+                  e('select',{className:'col-filter-input',value:cf.zi,onChange:function(ev){setCF('zi',ev.target.value);},style:{background:C.inputBg}},
                     e('option',{value:'all'},'Toate'),
-                    e('option',{value:'urgent'},'🔴 Urgent'),
-                    e('option',{value:'warning'},'🟠 Atenție'),
-                    e('option',{value:'monitor'},'🔵 Monitor'),
-                    e('option',{value:'ok'},'✅ OK'),
-                    e('option',{value:'expired'},'⚫ Expirat')
+                    zileDisponibile.map(function(z){return e('option',{key:z.val,value:z.val},z.label);})
                   )
                 ),
+                // Filtru luna — dropdown cu lunile disponibile
+                e('td',{style:tfStyle},
+                  e('select',{className:'col-filter-input',value:cf.luna,onChange:function(ev){setCF('luna',ev.target.value);},style:{background:C.inputBg}},
+                    e('option',{value:'all'},'Toate'),
+                    luniDisponibile.map(function(l){return e('option',{key:l.val,value:l.val},l.label);})
+                  )
+                ),
+                e('td',{style:tfStyle}),
+                e('td',{style:tfStyle},e('input',{className:'col-filter-input',placeholder:'Caută...',value:cf.furnizor,onChange:function(ev){setCF('furnizor',ev.target.value);},style:{background:C.inputBg}})),
                 e('td',{style:tfStyle},
                   e('select',{className:'col-filter-input',value:cf.status,onChange:function(ev){setCF('status',ev.target.value);},style:{background:C.inputBg}},
                     e('option',{value:'all'},'Toate'),
@@ -401,9 +424,12 @@ function App(){
             e('tbody',null,
               filtered.map(function(c){
                 var st=STATUS[c._crm.status||'nou'];
-                var u=URGENCY[c.urgency];
-                var uCol=({urgent:'#ef4444',warning:'#f97316',monitor:'#3b82f6',ok:'#10b981',expired:'#475569'})[c.urgency]||C.muted;
                 var stBg=theme==='dark'?st.bg:st.bgL;
+                var da=c.dataAtribuire?new Date(c.dataAtribuire):null;
+                var LUNI_SCURT=['Ian','Feb','Mar','Apr','Mai','Iun','Iul','Aug','Sep','Oct','Nov','Dec'];
+                var LUNI_LUNG=['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie'];
+                var ziua=da?da.getDate():'—';
+                var luna=da?LUNI_LUNG[da.getMonth()]:'—';
                 return e('tr',{key:c.id,style:{cursor:'pointer'},
                   onMouseEnter:function(ev){ev.currentTarget.querySelectorAll('td').forEach(function(td){td.style.background='rgba(128,128,128,0.05)';});},
                   onMouseLeave:function(ev){ev.currentTarget.querySelectorAll('td').forEach(function(td){td.style.background='';});}
@@ -414,15 +440,14 @@ function App(){
                   e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{color:C.muted,fontSize:12,whiteSpace:'nowrap'})},c.localitate||'—'),
                   e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{color:C.muted,fontSize:12,whiteSpace:'nowrap'})},c.judet||'—'),
                   e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{fontFamily:'IBM Plex Mono,monospace',color:C.accent,fontWeight:700,whiteSpace:'nowrap'})},fmtVal(c.valoare)),
-                  e('td',{onClick:function(){openContract(c);},style:tdStyle},
-                    c.days!==null?e('span',{style:{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,color:uCol}},c.days<0?'Expirat':c.days+' zile'):'—'
-                  ),
-                  e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{fontSize:11,color:C.muted,fontFamily:'IBM Plex Mono,monospace',whiteSpace:'nowrap'})},fmtDate(c.dataAtribuire)),
+                  // Ziua licitației — doar numărul zilei
+                  e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,textAlign:'center'})},ziua),
+                  // Luna licitației — text complet
+                  e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{color:C.muted,fontSize:12,whiteSpace:'nowrap'})},luna),
+                  // Data expirării — simplă, fără logică de urgență
+                  e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{fontSize:12,color:C.muted,fontFamily:'IBM Plex Mono,monospace',whiteSpace:'nowrap'})},fmtDate(c.dataExpirare)),
                   e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{fontSize:12,color:C.muted,maxWidth:180})},
                     e('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:170}},c.furnizor||'—')
-                  ),
-                  e('td',{onClick:function(){openContract(c);},style:Object.assign({},tdStyle,{textAlign:'center'})},
-                    e('span',{title:u?u.label+' — '+u.days:(c.days<0?'Expirat':'OK'),style:{display:'inline-block',width:12,height:12,borderRadius:'50%',background:u?u.col:(c.days<0?'#475569':'#10b981'),boxShadow:'0 0 6px '+(u?u.col:(c.days<0?'#475569':'#10b981'))+'88',animation:c.urgency==='urgent'?'blink 1.5s infinite':undefined}})
                   ),
                   e('td',{style:tdStyle},
                     e('select',{
